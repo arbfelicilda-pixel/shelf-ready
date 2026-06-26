@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shelf Ready</title>
+
+  <!--
+    FONT NOTE FOR BEFORE SALE:
+    This build intentionally does NOT load fonts from Google Fonts'
+    CDN. A Gumroad customer who opens this offline, on a plane, with
+    no wifi, must see the same product as someone online — a CDN
+    font call breaks that promise the moment there's no connection.
+
+    Before shipping: download the static .woff2 files for Lora
+    (500/600), IBM Plex Mono (400/500/600), and Courier Prime
+    (400/700) from Google Fonts, place them in assets/fonts/, and
+    uncomment the @font-face block in css/fonts.css. Until then,
+    the fallback stack in tokens.css (Georgia / Courier New /
+    system monospace) renders correctly and never breaks — it
+    just isn't the exact brief typeface yet.
+  -->
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+</head>
+<body>
+  <div id="app-root"></div>
+
+  <!-- Data layer -->
+  <script src="data/evidence.js"></script>
+
+  <!-- Third-party libraries (bundled, offline-safe, see lib/ for license notes) -->
+  <script src="lib/mammoth.browser.min.js"></script>
+
+  <!-- Core engine -->
+  <script src="js/state.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/editorial-rules-discover.js"></script>
+  <script src="js/manuscript-import.js"></script>
+  <script src="js/inspections.js"></script>
+  <script src="js/design-review.js"></script>
+  <script src="js/package-review.js"></script>
+  <script src="js/publish-review.js"></script>
+
+  <!-- Views -->
+  <script src="js/views-shell.js"></script>
+  <script src="js/views-discover.js"></script>
+  <script src="js/views-refine.js"></script>
+  <script src="js/views-design.js"></script>
+  <script src="js/views-package.js"></script>
+  <script src="js/views-publish.js"></script>
+  <script src="js/views-settings.js"></script>
+
+  <!-- Bootstrap -->
+  <script src="js/app.js"></script>
+</body>
+</html>
