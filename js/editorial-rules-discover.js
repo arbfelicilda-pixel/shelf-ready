@@ -87,26 +87,31 @@ const DiscoverReview = (function () {
       return { verdict: 'flag', headline: 'Nothing here yet', explanation: '', suggestions: [], confidenceLevel: 'weak' };
     }
 
-    const sentences = sentenceCount(text);
     const words = wordCount(text);
     const hasChangeVerb = containsAny(text, CHANGE_VERBS);
 
-    if (sentences > 1) {
+    // Originally flagged anything over one sentence as "trying to do too
+    // much" — but the question itself was changed to explicitly ask for
+    // 50-100 words, which is naturally several sentences. Keeping the old
+    // rule would have punished anyone who correctly followed the new
+    // instructions. Word-count range is now the real target, matching
+    // what the question actually asks for.
+    if (words > 130) {
       return {
         verdict: 'flag',
-        headline: 'Trying to do too much',
-        explanation: "A concept that takes more than one sentence to explain usually means the book hasn't found its center yet. Readers decide whether to keep reading in about the same amount of time it took you to write this.",
-        suggestions: ['Cut it down to the single sentence that matters most. Everything else can live in the chapters.'],
-        confidenceLevel: 'weak'
+        headline: 'Running long',
+        explanation: "This is well past the 50-100 word target. A concept this long usually means several ideas are competing for the same book — readers decide whether to keep reading in far less time than this.",
+        suggestions: ['Try cutting this down toward 100 words. Everything else can live in the chapters.'],
+        confidenceLevel: 'developing'
       };
     }
 
-    if (words < 8) {
+    if (words < 25) {
       return {
         verdict: 'flag',
         headline: 'Too thin to test yet',
-        explanation: 'Right now this reads more like a title than a concept. A concept needs enough in it to test against — who it changes, and how.',
-        suggestions: ['Add who this is for and what changes for them, in the same sentence.'],
+        explanation: 'Right now this is closer to a single sentence than the 50-100 word concept we\'re looking for. A concept needs enough in it to test against — who it changes, and how.',
+        suggestions: ['Add who this is for and what changes for them — aim for 50-100 words total.'],
         confidenceLevel: 'weak'
       };
     }

@@ -23,6 +23,16 @@ function ViewRefineUpload(projectId) {
       No need to copy and paste. Upload the file as it is — messy formatting and all.
     </p>
 
+    <div class="confidence-banner" style="border-left-color:var(--color-rule); margin-bottom: var(--space-3);">
+      Shelf Ready automatically detects chapters from most manuscripts. Supported chapter headings include:
+      <ul class="review-suggestions" style="margin-top:0.5rem;">
+        <li>Chapter 1, CHAPTER ONE, or similar</li>
+        <li>Part I, Part One, or similar</li>
+        <li>Introduction, Prologue, Conclusion, Epilogue</li>
+      </ul>
+      If your manuscript uses unusual chapter names, we'll let you review what was detected before anything is analyzed.
+    </div>
+
     <label class="dropzone" id="dropzone" tabindex="0">
       <div class="dropzone-icon">&#128196;</div>
       <div>Click to choose a file, or drag it here</div>
@@ -158,22 +168,57 @@ function ViewRefinePreview(projectId) {
 
   if (!manuscript) return Router.navigate('/project/' + projectId + '/refine/upload');
 
+  // Hard stop: zero detected chapters means every downstream review has
+  // nothing to analyze, and a clean "good shape" report on a manuscript
+  // the parser never actually read is worse than no report at all. This
+  // screen must never let the user proceed past zero chapters with a
+  // button that implies the data is fine.
+  if (manuscript.chapters.length === 0) {
+    const html = `
+      <p class="screen-eyebrow">Book Preview</p>
+      <h1 class="screen-question">We couldn't detect your chapters.</h1>
+      <div class="review-card">
+        <div class="review-eyebrow">Worth a second look</div>
+        <div class="review-headline">Shelf Ready reviews books chapter by chapter</div>
+        <div class="review-explanation">
+          Your manuscript imported successfully (${manuscript.rawWordCount.toLocaleString()} words), but we
+          couldn't find chapter headings to split it on. This usually happens when:
+        </div>
+        <ul class="review-suggestions">
+          <li>chapters aren't labeled with a heading</li>
+          <li>headings use unusual or inconsistent formatting</li>
+          <li>the file's export process removed heading styles</li>
+        </ul>
+      </div>
+      <div class="actions-row">
+        <a href="#/project/${projectId}/refine/upload" class="btn" style="text-decoration:none;">
+          Try a different file
+        </a>
+      </div>
+    `;
+    document.getElementById('app-root').innerHTML = renderShell(html);
+    mountShellChrome();
+    return;
+  }
+
   const confidenceBanner = manuscript.overallConfidence !== 'high'
     ? '<div class="confidence-banner">We found ' + manuscript.chapters.length +
-      ' chapters. We\'re not completely sure we split every one correctly — please check the list below before continuing.</div>'
+      ' chapters, but we\'re not completely sure we split every one correctly — please review the list below before continuing.</div>'
     : '';
 
-  const chapterRows = manuscript.chapters.map((c, i) =>
-    '<div class="chapter-row">' +
+  const chapterRows = manuscript.chapters.map((c, i) => {
+    const isLast = i === manuscript.chapters.length - 1;
+    return '<div class="chapter-row">' +
       '<span class="chapter-row-num">' + (i + 1) + '</span>' +
       '<input class="chapter-row-title" data-idx="' + i + '" value="' + escapeHtml(c.title) + '" />' +
-      (c.confidence !== 'high' ? '<span class="confidence-flag ' + c.confidence + '">not sure</span>' : '') +
-    '</div>'
-  ).join('');
+      (c.confidence !== 'high' ? '<span class="confidence-flag ' + c.confidence + '">not sure</span>' : '<span class="confidence-flag" style="background:rgba(107,143,113,0.15); color:var(--color-pass);">✓ detected</span>') +
+      (!isLast ? '<button class="icon-btn merge-next-btn" data-idx="' + i + '" title="Merge into the next chapter" style="padding:0.3rem 0.6rem; font-size:var(--scale-micro);">Merge ↓</button>' : '') +
+    '</div>';
+  }).join('');
 
   const html = `
     <p class="screen-eyebrow">Book Preview</p>
-    <h1 class="screen-question">Here's what we found.</h1>
+    <h1 class="screen-question">Please review the detected structure.</h1>
 
     ${confidenceBanner}
 
@@ -190,11 +235,11 @@ function ViewRefinePreview(projectId) {
       <span class="preview-field-value">${manuscript.rawWordCount.toLocaleString()}</span>
     </div>
 
-    <h2 style="margin-top: var(--space-4);">${manuscript.chapters.length} Chapters</h2>
+    <h2 style="margin-top: var(--space-4);">${manuscript.chapters.length} Chapters Detected</h2>
     <div class="chapter-list">${chapterRows}</div>
 
     <div class="actions-row">
-      <button class="btn" id="continue-btn">Looks correct, continue</button>
+      <button class="btn" id="continue-btn">This is correct, run the review</button>
       <a href="#/project/${projectId}/refine/upload" class="btn-quiet" style="text-decoration:none; padding:0.75rem 1.2rem; border-radius:var(--radius);">
         Upload a different file
       </a>
@@ -211,6 +256,34 @@ function ViewRefinePreview(projectId) {
       updated.chapters = manuscript.chapters.slice();
       updated.chapters[idx] = Object.assign({}, updated.chapters[idx], { title: e.target.value });
       Store.updateField('refine.manuscript', updated);
+    });
+  });
+
+  document.querySelectorAll('.merge-next-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      const fresh = Store.getActiveProject().refine.manuscript;
+      const chapters = fresh.chapters.slice();
+      const current = chapters[idx];
+      const next = chapters[idx + 1];
+      if (!next) return;
+
+      // Fold the current chapter's title (kept as a leading line, since
+      // it may have been real content like a section label, not noise)
+      // and paragraphs into the next chapter, then remove this row.
+      // This is the fix for a real case found in testing: a section
+      // label ("THE SKIN") gets detected as if it were its own chapter
+      // — merging it into the chapter that follows recovers the lost
+      // structure without silently deleting the writer's words.
+      const merged = Object.assign({}, next, {
+        paragraphs: [current.title].concat(current.paragraphs, next.paragraphs),
+        wordCount: current.wordCount + next.wordCount + (current.title.match(/\S+/g) || []).length
+      });
+      chapters.splice(idx, 2, merged);
+
+      const updated = Object.assign({}, fresh, { chapters });
+      Store.updateField('refine.manuscript', updated);
+      ViewRefinePreview(projectId); // re-render with the merged list
     });
   });
 

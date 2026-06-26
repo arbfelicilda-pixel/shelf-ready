@@ -15,15 +15,15 @@ const DISCOVER_STEPS = ['workingTitle', 'concept', 'reader', 'promise', 'positio
 
 const DISCOVER_CONTENT = {
   workingTitle: {
-    eyebrow: "Let's start with your book.",
+    eyebrow: "We're defining the foundation of your book before you write or revise it.",
     question: "What's the working title? (It can change later.)",
-    placeholder: 'e.g. The Invisible Mind',
+    placeholder: 'e.g. The Quiet Advantage',
     type: 'text'
   },
   concept: {
     eyebrow: 'Tell me what it\u2019s about.',
-    question: 'Describe your book in one sentence.',
-    placeholder: 'Helps overlooked employees stop apologizing for asking to be seen.',
+    question: 'Describe your book in 50–100 words. Don\u2019t worry about writing perfectly — just explain what it\u2019s about.',
+    placeholder: 'e.g. This book helps overlooked employees stop apologizing for asking to be seen. Most people learn to shrink instead of speak up, especially after being passed over once. Through real workplace scenarios, readers learn exactly when to speak, what to say, and how to do it without sounding defensive or desperate for approval.',
     type: 'textarea'
   },
   reader: {
@@ -40,7 +40,8 @@ const DISCOVER_CONTENT = {
   },
   positioning: {
     eyebrow: 'Where would this sit on a shelf?',
-    question: 'If your book were on a real shelf, which two or three books would be its neighbors?',
+    question: 'Imagine your book on a bookstore shelf. Which 2–3 published books would be sitting beside it?',
+    hint: 'Real book titles, not categories — e.g. "Atomic Habits," not "self-help books."',
     type: 'positioning'
   }
 };
@@ -175,8 +176,8 @@ function ViewDiscoverStep(projectId, step) {
   } else if (content.type === 'positioning') {
     const comps = project.discover.positioningComps;
     fieldHtml = `
-      <input class="field" id="comp-1" type="text" placeholder="First comparable book" value="${escapeHtml(comps[0] || '')}" style="margin-bottom:0.6rem;" />
-      <input class="field" id="comp-2" type="text" placeholder="Second comparable book" value="${escapeHtml(comps[1] || '')}" />
+      <input class="field" id="comp-1" type="text" placeholder="e.g. Atomic Habits" value="${escapeHtml(comps[0] || '')}" style="margin-bottom:0.6rem;" />
+      <input class="field" id="comp-2" type="text" placeholder="e.g. Deep Work" value="${escapeHtml(comps[1] || '')}" />
     `;
   }
 
@@ -184,8 +185,8 @@ function ViewDiscoverStep(projectId, step) {
     ${renderAmbientProgress(stepIndex)}
     <p class="screen-eyebrow">${content.eyebrow}</p>
     <h1 class="screen-question">${content.question}</h1>
+    ${content.hint ? `<p class="field-hint" style="margin-top:-0.5rem; margin-bottom:var(--space-2);">${escapeHtml(content.hint)}</p>` : ''}
     ${fieldHtml}
-    ${step !== 'positioning' && content.type !== 'text' ? `<div class="field-hint" id="field-hint"></div>` : ''}
     <div id="review-zone">${reviewHtml}${compareHtml}</div>
     <div class="actions-row">
       <button class="btn" id="continue-btn">Continue</button>
@@ -277,14 +278,15 @@ function ViewDiscoverDone(projectId) {
       <div class="confidence-row"><span>Positioning</span>${confidenceDots(c.positioningClarity)}</div>
     </div>
 
-    <p>Next, we shape the structure — the narrative spine and chapter map that
-    everything else gets built on. That part of Shelf Ready is coming soon.</p>
+    <p>Great. We now know what your book is trying to do. Next we'll build
+    the narrative spine and chapter map everything else gets built on.</p>
 
     <div class="actions-row">
+      <a href="#/project/${projectId}/design/spine" class="btn" style="text-decoration:none;">Continue to Design</a>
       <button class="btn-quiet" id="review-discover-btn" style="border-radius:var(--radius); padding:0.75rem 1.2rem;">
         Review my answers
       </button>
-      <a href="#/dashboard" class="btn" style="text-decoration:none;">Back to My Books</a>
+      <a href="#/dashboard" class="btn-quiet" style="text-decoration:none; padding:0.75rem 1.2rem; border-radius:var(--radius);">Back to My Books</a>
     </div>
   `;
   document.getElementById('app-root').innerHTML = renderShell(html);

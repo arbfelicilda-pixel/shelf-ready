@@ -20,20 +20,60 @@
 
 const ManuscriptImport = (function () {
 
-  const CHAPTER_PATTERNS = [
-    /^chapter\s+\d+/i,
-    /^chapter\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/i,
+  const NUMBER_WORDS = 'one|two|three|four|five|six|seven|eight|nine|ten|' +
+    'eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty';
+
+  // Two separate tiers, matching how Kindle/real books actually nest
+  // structure: PART groups CHAPTERS, and a chapter's number marker
+  // ("CHAPTER ONE") is very often its own line, with the chapter's
+  // real title ("The First Thing We Trust") as a SEPARATE line right
+  // after it — not one combined line. The original version only
+  // matched a single combined line and only matched digit numbers for
+  // Part ("Part 1", never "PART ONE"), which a real test manuscript
+  // with spelled-out numbers and a two-line chapter header exposed.
+  const PART_PATTERNS = [
     /^part\s+\d+/i,
-    /^\d+\.\s+\S/, // "1. Some Title"
+    new RegExp('^part\\s+(' + NUMBER_WORDS + ')\\b', 'i'),
+    /^book\s+\d+/i,
+    new RegExp('^book\\s+(' + NUMBER_WORDS + ')\\b', 'i'),
+  ];
+
+  const CHAPTER_MARKER_PATTERNS = [
+    /^chapter\s+\d+/i,
+    new RegExp('^chapter\\s+(' + NUMBER_WORDS + ')\\b', 'i'),
+    /^\d+\.\s*$/, // a bare "1." on its own line
+    /^\d+\.\s+\S/, // "1. Some Title" combined on one line
   ];
 
   const FRONT_MATTER_HEADINGS = /^(introduction|preface|foreword|prologue)$/i;
   const BACK_MATTER_HEADINGS = /^(conclusion|afterword|epilogue|references|bibliography|appendix|acknowledgments|about the author)/i;
 
+  function isPartMarker(text) {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.length > 40) return false;
+    return PART_PATTERNS.some((re) => re.test(trimmed));
+  }
+
+  /**
+   * A "bare chapter marker" is a short line that's JUST the chapter
+   * number ("CHAPTER ONE", "Chapter 3", "7.") with no title attached
+   * on the same line. This is distinct from a combined heading like
+   * "Chapter 3: The Reckoning" — bare markers need to look at the
+   * NEXT line for the real title, which the original version never
+   * did at all.
+   */
+  function isBareChapterMarker(text) {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.length > 30) return false;
+    if (/^\d+\.\s+\S/.test(trimmed)) return false; // "1. Title" is combined, not bare
+    return CHAPTER_MARKER_PATTERNS.some((re) => re.test(trimmed)) &&
+      !/[a-z]{4,}/.test(trimmed.replace(/^chapter\s+\w+/i, '').trim()); // nothing but the marker itself
+  }
+
   function looksLikeChapterHeading(text) {
     const trimmed = text.trim();
     if (!trimmed || trimmed.length > 80) return false; // headings are short
-    if (CHAPTER_PATTERNS.some((re) => re.test(trimmed))) return true;
+    if (CHAPTER_MARKER_PATTERNS.some((re) => re.test(trimmed))) return true;
     if (FRONT_MATTER_HEADINGS.test(trimmed) || BACK_MATTER_HEADINGS.test(trimmed)) return true;
     // ALL CAPS short line, no terminal punctuation — looks like a heading
     if (trimmed === trimmed.toUpperCase() && trimmed.length < 60 && !/[.!?]$/.test(trimmed)) return true;
@@ -42,14 +82,22 @@ const ManuscriptImport = (function () {
 
   /**
    * Parses mammoth's HTML output into a flat list of "blocks":
-   * { type: 'heading'|'bold-paragraph'|'paragraph', text, level, confidence }
-   * This is a light DOM walk, not a full HTML parser — sufficient
-   * for mammoth's relatively flat output structure.
+   * { type: 'part'|'heading'|'paragraph', text, level, confidence }
+   *
+   * Two real fixes over the original version, both driven by a real
+   * test manuscript that exposed them:
+   *   1. "PART ONE" (spelled-out number) is now its own block type,
+   *      separate from chapters — it groups chapters, it isn't one.
+   *   2. A bare chapter marker line ("CHAPTER ONE" with nothing else
+   *      on that line) is merged with whatever text comes immediately
+   *      after it into ONE heading ("Chapter One: The First Thing We
+   *      Trust") — the original only ever looked at one line at a
+   *      time and had no way to attach a marker to its title.
    */
   function parseBlocks(html) {
     const container = document.createElement('div');
     container.innerHTML = html;
-    const blocks = [];
+    const rawBlocks = [];
 
     container.childNodes.forEach((node) => {
       if (node.nodeType !== 1) return; // skip text nodes
@@ -58,35 +106,75 @@ const ManuscriptImport = (function () {
       if (!text) return;
 
       if (tag === 'h1' || tag === 'h2') {
-        blocks.push({ type: 'heading', text, level: tag, confidence: 'high' });
+        rawBlocks.push({ type: 'heading', text, level: tag, confidence: 'high' });
         return;
       }
 
       if (tag === 'p') {
-        // Detect "bold-only paragraph" — mammoth wraps bold runs in <strong>
         const onlyChild = node.children.length === 1 ? node.children[0] : null;
         const isFullyBold =
           onlyChild &&
           onlyChild.tagName.toLowerCase() === 'strong' &&
           onlyChild.textContent.trim() === text;
+        const isEmphasized = isFullyBold || (onlyChild && onlyChild.tagName.toLowerCase() === 'em');
 
-        if (isFullyBold && looksLikeChapterHeading(text)) {
-          blocks.push({ type: 'heading', text, level: 'fallback', confidence: 'medium' });
+        if (isPartMarker(text)) {
+          rawBlocks.push({ type: 'part', text, level: 'fallback', confidence: 'medium' });
+          return;
+        }
+
+        if (isEmphasized && isBareChapterMarker(text)) {
+          rawBlocks.push({ type: 'bare-chapter-marker', text, level: 'fallback', confidence: 'medium' });
+          return;
+        }
+        if (isBareChapterMarker(text)) {
+          rawBlocks.push({ type: 'bare-chapter-marker', text, level: 'fallback', confidence: 'low' });
+          return;
+        }
+
+        if (isEmphasized && looksLikeChapterHeading(text)) {
+          rawBlocks.push({ type: 'heading', text, level: 'fallback', confidence: 'medium' });
           return;
         }
 
         if (looksLikeChapterHeading(text)) {
-          // Plain paragraph that pattern-matches a chapter title even
-          // without bold — lower confidence still, but worth flagging
-          // rather than silently merging into prior chapter.
-          blocks.push({ type: 'heading', text, level: 'fallback', confidence: 'low' });
+          rawBlocks.push({ type: 'heading', text, level: 'fallback', confidence: 'low' });
           return;
         }
 
-        blocks.push({ type: 'paragraph', text, confidence: 'high' });
+        rawBlocks.push({ type: 'paragraph', text, confidence: 'high' });
         return;
       }
     });
+
+    // Second pass: merge any "bare-chapter-marker" with the very next
+    // block's text (assumed to be the chapter's real title) into a
+    // single combined heading. If a bare marker is immediately followed
+    // by ANOTHER heading/part/marker (no title line in between), it's
+    // left standing on its own rather than merged with unrelated content.
+    const blocks = [];
+    for (let i = 0; i < rawBlocks.length; i++) {
+      const block = rawBlocks[i];
+      if (block.type === 'bare-chapter-marker') {
+        const next = rawBlocks[i + 1];
+        const nextIsPlainTitleLine = next && next.type === 'paragraph' && next.text.length < 100;
+        if (nextIsPlainTitleLine) {
+          blocks.push({
+            type: 'heading',
+            text: block.text + ': ' + next.text,
+            level: block.level,
+            confidence: block.confidence
+          });
+          i++; // consume the title line too, it's now part of this heading
+          continue;
+        }
+        // No title line follows — keep the bare marker as its own heading
+        // rather than silently dropping it.
+        blocks.push({ type: 'heading', text: block.text, level: block.level, confidence: block.confidence });
+        continue;
+      }
+      blocks.push(block);
+    }
 
     return blocks;
   }
@@ -95,21 +183,35 @@ const ManuscriptImport = (function () {
    * Groups blocks into chapters. The first block(s) before any
    * detected heading become a synthetic "Front Matter" bucket
    * (title page, epigraph, etc.) rather than silently discarded.
+   * Part markers ("PART ONE") are NOT chapter boundaries — they're
+   * tracked separately and attached to each chapter that falls under
+   * them, so a chapter's title can be shown alongside its part.
    */
   function groupIntoChapters(blocks) {
     const chapters = [];
     let current = null;
+    let currentPart = null;
     let seenHighConfidenceHeading = false;
 
+    // Gate opens (stops treating things as front matter) once we've
+    // seen EITHER a real heading OR a Part marker — testing showed
+    // gating on "first heading" alone still swallowed a real chapter
+    // section ("LOOK AT IT") because it happened to be the first
+    // heading-TYPE block, even though a Part marker had already
+    // appeared before it and should have already signaled "real
+    // structure has started here."
+    let structureHasStarted = false;
+
     blocks.forEach((block) => {
+      if (block.type === 'part') {
+        currentPart = block.text;
+        structureHasStarted = true;
+        return; // a Part marker never starts/ends a chapter on its own
+      }
+
       if (block.type === 'heading') {
-        // A fallback-confidence heading appearing before we've seen ANY
-        // real (high-confidence) heading is much more likely to be a
-        // title-page line (book title, byline, tagline) than an actual
-        // chapter — real manuscripts rarely open with their first
-        // chapter detected at medium/low confidence. Treat it as front
-        // matter text instead of a chapter boundary in that case.
-        const isLikelyTitlePageLine = block.confidence !== 'high' && !seenHighConfidenceHeading;
+        const isLikelyTitlePageLine = block.confidence !== 'high' && !structureHasStarted && !seenHighConfidenceHeading;
+        structureHasStarted = true;
 
         if (isLikelyTitlePageLine) {
           if (!current) {
@@ -124,6 +226,7 @@ const ManuscriptImport = (function () {
         if (current) chapters.push(current);
         current = {
           title: block.text,
+          part: currentPart,
           confidence: block.confidence,
           paragraphs: [],
           wordCount: 0
