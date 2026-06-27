@@ -181,3 +181,19 @@ function escapeHtml(str) {
   div.textContent = str || '';
   return div.innerHTML;
 }
+
+/**
+ * Renders a "Fix in: [Phase] → [Field]" link for a finding's fixRoute,
+ * if one exists. Per the locked decision: only findings with a REAL,
+ * defensible destination get a link — roughly a third of all findings,
+ * since most are manuscript-wide patterns with no single field to
+ * route back to. No fixRoute means no link, never a fake one.
+ */
+function renderFixRouteLink(projectId, fixRoute) {
+  if (!fixRoute) return '';
+  return `
+    <a href="#/project/${projectId}/${fixRoute.path}" class="fix-route-link">
+      Fix in: ${escapeHtml(fixRoute.phase)} → ${escapeHtml(fixRoute.field)}
+    </a>
+  `;
+}

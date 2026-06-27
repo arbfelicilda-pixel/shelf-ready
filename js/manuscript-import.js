@@ -31,11 +31,18 @@ const ManuscriptImport = (function () {
   // matched a single combined line and only matched digit numbers for
   // Part ("Part 1", never "PART ONE"), which a real test manuscript
   // with spelled-out numbers and a two-line chapter header exposed.
+  // Roman numerals I-XX, as a word-boundary-safe alternation. Matched as
+  // its own group since "Part I" and "Part 1" need different regex
+  // shapes (Roman numerals are letters, not digits).
+  const ROMAN_NUMERALS = 'I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI|XVII|XVIII|XIX|XX';
+
   const PART_PATTERNS = [
     /^part\s+\d+/i,
     new RegExp('^part\\s+(' + NUMBER_WORDS + ')\\b', 'i'),
+    new RegExp('^part\\s+(' + ROMAN_NUMERALS + ')\\b', 'i'), // confirmed needed against a real manuscript using "PART I" through "PART IV" exclusively — no digit or spelled-out form anywhere
     /^book\s+\d+/i,
     new RegExp('^book\\s+(' + NUMBER_WORDS + ')\\b', 'i'),
+    new RegExp('^book\\s+(' + ROMAN_NUMERALS + ')\\b', 'i'),
   ];
 
   const CHAPTER_MARKER_PATTERNS = [
@@ -44,6 +51,19 @@ const ManuscriptImport = (function () {
     /^\d+\.\s*$/, // a bare "1." on its own line
     /^\d+\.\s+\S/, // "1. Some Title" combined on one line
   ];
+
+  // A printed Table of Contents entry ("1. The Dark Is Not Empty   251")
+  // matches the SAME "1. Some Title" pattern as a real chapter heading,
+  // but always ends in a page number. Spacing before that number varies
+  // a lot in real manuscripts — tabs, multiple spaces, or even a single
+  // space (confirmed against a real file using each of these in
+  // different places) — so this checks for ANY trailing whitespace
+  // followed by a standalone number, rather than one specific spacing
+  // pattern. Real chapter headings in the body of a manuscript don't
+  // end in a bare number this way.
+  function looksLikeTOCLine(text) {
+    return /\s+\d{1,4}\s*$/.test(text.trimEnd());
+  }
 
   const FRONT_MATTER_HEADINGS = /^(introduction|preface|foreword|prologue)$/i;
   const BACK_MATTER_HEADINGS = /^(conclusion|afterword|epilogue|references|bibliography|appendix|acknowledgments|about the author)/i;
@@ -73,6 +93,7 @@ const ManuscriptImport = (function () {
   function looksLikeChapterHeading(text) {
     const trimmed = text.trim();
     if (!trimmed || trimmed.length > 80) return false; // headings are short
+    if (looksLikeTOCLine(trimmed)) return false; // a ToC entry, not a real heading
     if (CHAPTER_MARKER_PATTERNS.some((re) => re.test(trimmed))) return true;
     if (FRONT_MATTER_HEADINGS.test(trimmed) || BACK_MATTER_HEADINGS.test(trimmed)) return true;
     // ALL CAPS short line, no terminal punctuation — looks like a heading
@@ -155,6 +176,26 @@ const ManuscriptImport = (function () {
     const blocks = [];
     for (let i = 0; i < rawBlocks.length; i++) {
       const block = rawBlocks[i];
+
+      // A Part marker ("PART I") is very often followed immediately by
+      // its own subtitle ("THE CAVE") as a separate short ALL-CAPS line.
+      // Without this merge, that subtitle line independently matches the
+      // ALL-CAPS heading pattern and gets counted as its own chapter —
+      // confirmed against a real manuscript where 4 Parts + their 4
+      // subtitles were inflating the chapter count by 8 entries that
+      // were never meant to be chapters at all.
+      if (block.type === 'part') {
+        const next = rawBlocks[i + 1];
+        const nextIsShortHeadingLine = next && next.type === 'heading' && next.text.length < 60;
+        if (nextIsShortHeadingLine) {
+          blocks.push({ type: 'part', text: block.text + ' — ' + next.text, level: block.level, confidence: block.confidence });
+          i++; // consume the subtitle line, it's now part of the Part's name
+          continue;
+        }
+        blocks.push(block);
+        continue;
+      }
+
       if (block.type === 'bare-chapter-marker') {
         const next = rawBlocks[i + 1];
         const nextIsPlainTitleLine = next && next.type === 'paragraph' && next.text.length < 100;
@@ -210,8 +251,22 @@ const ManuscriptImport = (function () {
       }
 
       if (block.type === 'heading') {
+        // Only a genuine chapter/part-style marker counts as "real
+        // structure has started" — a second, structurally-identical
+        // ALL-CAPS line (a repeated title-page title, common in real
+        // manuscripts) must NOT flip this gate, or everything between
+        // it and the real first chapter gets misjoined into one false
+        // "chapter" entry. Confirmed against a real manuscript where
+        // the title appeared twice on the title page; before this fix,
+        // the copyright notice, dedication, and printed Table of
+        // Contents all landed inside a fake chapter named after the
+        // second title occurrence.
+        const isGenuineMarker = CHAPTER_MARKER_PATTERNS.some((re) => re.test(block.text.trim())) ||
+          FRONT_MATTER_HEADINGS.test(block.text.trim()) || BACK_MATTER_HEADINGS.test(block.text.trim());
+
         const isLikelyTitlePageLine = block.confidence !== 'high' && !structureHasStarted && !seenHighConfidenceHeading;
-        structureHasStarted = true;
+
+        if (isGenuineMarker) structureHasStarted = true;
 
         if (isLikelyTitlePageLine) {
           if (!current) {
@@ -229,7 +284,15 @@ const ManuscriptImport = (function () {
           part: currentPart,
           confidence: block.confidence,
           paragraphs: [],
-          wordCount: 0
+          wordCount: 0,
+          // Back matter (Epilogue, About the Author, Acknowledgments,
+          // etc.) gets flagged the same way front matter already is,
+          // so review logic can exclude it from content-based checks
+          // like chapter-length balance and overlap — confirmed needed
+          // against a real manuscript where "About the Author" (37
+          // words) was being judged against the book's average chapter
+          // length as if it were a real content chapter.
+          isBackMatter: BACK_MATTER_HEADINGS.test(block.text.trim())
         };
       } else {
         if (!current) {

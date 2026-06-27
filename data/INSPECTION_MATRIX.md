@@ -174,34 +174,42 @@ the evidence used to check this, not the thing being judged.)*
 
 ## Build Status — v1 Review Engine Complete
 
-All 11 implemented reviews (INSP-001, 003, 004, 006, 007, 008, 009, 010,
-011, 012, 013) are coded, individually unit-tested against constructed
-examples, and verified together via full DOM-rendered integration tests
-against two real `.docx` files. INSP-002 and INSP-005 were superseded by
-the INSP-013 merge per locked decision.
+All 11 originally-implemented reviews (INSP-001, 003, 004, 006, 007, 008,
+009, 010, 011, 012, 013) plus five additions (INSP-014 through INSP-018,
+added after testing against a real, externally beta-read manuscript)
+are coded, tested, and verified.
 
-**A note on INSP-010 (Conclusion Promise-Fulfillment):** the original spec
-included detecting "introduces new ideas instead of reinforcing the
-promise." Four rounds of testing against real conclusions showed this
-consistently failed in one direction or the other — too strict and it
-missed a genuine new-framework case, loosened and it false-flagged
-ordinary one-off vocabulary as fabricated "new ideas." This is the same
-boundary the team explicitly hit and named with "Human Reality": telling
-apart a deliberately introduced new concept from ordinary word variation
-requires understanding what words mean, not just counting them. Per the
-locked principle — never claim more than the software can honestly
-demonstrate — the new-ideas half of this check was cut rather than
-shipped unreliable. INSP-010 now reports promise-term presence only,
-which tested reliably across every case. The new-ideas signal is a
-candidate for an optional AI-assisted review in a future version.
+**Five additions (INSP-014 to INSP-018), sourced from external research
+on voice/cadence/structural stress-testing:**
+- INSP-014 Passive Voice Density (was/were frequency)
+- INSP-015 Sentence Opener Repetition (first-word-of-sentence dominance)
+- INSP-016 Transition Word Overuse (paragraph-opening transition words)
+- INSP-017 Dialogue Tag Ratio ("said" vs. alternatives, dialogue only)
+- INSP-018 Backward Reference Density (proxy for chapter interdependence)
 
-A second, smaller lesson from this round: literal substring matching
-fails on word-form variation ("building" vs. "built," "compare" vs.
-"comparison"). A minimal stem-prefix check (4-character prefix match for
-words 5+ characters) was added to both INSP-009 and INSP-010 after testing
-surfaced false positives caused by this gap. This is not a real stemmer —
-it's a cheap, tested-sufficient proxy, documented here so it isn't mistaken
-for more linguistic sophistication than it has.
+All five are genuinely mechanical — literal word/pattern counts, same
+honesty tier as the original eleven. The source research also proposed
+checks for "does the spine hold," "does the metaphor sustain," "does the
+ending resonate" — these were evaluated and explicitly NOT built. They
+require reading and understanding prose meaning, the same wall already
+hit with "Human Reality" and "new ideas in conclusion." No amount of
+additional pattern-matching closes that gap; it would need an LLM call,
+which reopens the offline/cost tradeoff deliberately closed earlier.
+Documented here so the gap stays visible rather than quietly papered
+over with a check that sounds more capable than it is.
+
+**A note on real-manuscript testing:** this session's fixes were driven
+by an actual externally beta-read manuscript (9.2 reader score), used
+specifically to stress-test detection against a GOOD book rather than
+an obviously broken one. It surfaced four real, confirmed bugs in
+manuscript-import.js: (1) a printed Table of Contents being misread as
+duplicate chapter headings, (2) Roman-numeral Part markers ("PART I")
+never matching the digit/spelled-out-only pattern, (3) Part subtitles
+("THE CAVE" following "PART I") being counted as standalone chapters,
+and (4) a repeated title-page line incorrectly absorbing the copyright
+notice and dedication into one false chapter. All four are fixed and
+verified against the real file (45 falsely-detected chapters → 16
+correct chapters + Epilogue + About the Author, properly tagged).
 
 ---
 

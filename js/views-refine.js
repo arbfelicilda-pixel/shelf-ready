@@ -17,25 +17,33 @@ function ViewRefineUpload(projectId) {
   Store.setActiveProject(projectId);
 
   const html = `
-    <p class="screen-eyebrow">Manuscript Review</p>
+    <p class="screen-eyebrow">Does the manuscript say what I think it says? Manuscript Review.</p>
     <h1 class="screen-question">Drop your manuscript. I'll take it from here.</h1>
-    <p style="color:var(--color-ink-faint); margin-bottom: var(--space-3);">
+    <p class="upload-intro" style="color:var(--color-ink-faint);">
       No need to copy and paste. Upload the file as it is — messy formatting and all.
     </p>
 
-    <div class="confidence-banner" style="border-left-color:var(--color-rule); margin-bottom: var(--space-3);">
-      Shelf Ready automatically detects chapters from most manuscripts. Supported chapter headings include:
-      <ul class="review-suggestions" style="margin-top:0.5rem;">
+    <div class="upload-formats-card">
+      <div class="upload-formats-card-label">What Shelf Ready recognizes</div>
+      <ul class="upload-formats-list">
         <li>Chapter 1, CHAPTER ONE, or similar</li>
         <li>Part I, Part One, or similar</li>
         <li>Introduction, Prologue, Conclusion, Epilogue</li>
       </ul>
-      If your manuscript uses unusual chapter names, we'll let you review what was detected before anything is analyzed.
+      <p class="upload-formats-note">If your manuscript uses unusual chapter names, you'll get to review and fix what was detected before anything is analyzed.</p>
     </div>
 
     <label class="dropzone" id="dropzone" tabindex="0">
-      <div class="dropzone-icon">&#128196;</div>
-      <div>Click to choose a file, or drag it here</div>
+      <div class="dropzone-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 3.5C7 2.67157 7.67157 2 8.5 2H14.5L19 6.5V20.5C19 21.3284 18.3284 22 17.5 22H8.5C7.67157 22 7 21.3284 7 20.5V3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M14 2V6.5H19" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M10 13.5L12 11.5L14 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 17.5V11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="dropzone-cta">Click to choose a file, or drag it here</div>
+      <div class="dropzone-subcta">Your manuscript stays on this device — nothing is uploaded anywhere</div>
       <div class="dropzone-formats">Supported: .docx, .txt &nbsp;&middot;&nbsp; PDF coming later</div>
       <input type="file" id="file-input" accept=".docx,.txt" />
     </label>
@@ -107,7 +115,8 @@ async function handleFile(file, projectId) {
         title: c.title,
         confidence: c.confidence,
         wordCount: c.wordCount,
-        paragraphs: c.paragraphs
+        paragraphs: c.paragraphs,
+        isBackMatter: !!c.isBackMatter
       })),
       overallConfidence: imported.overallConfidence,
       rawWordCount: imported.rawWordCount,
@@ -390,6 +399,7 @@ function ViewRefineIssueDetail(projectId, idxStr) {
     <div class="issue-detail-section">
       <div class="issue-detail-label">Recommendation</div>
       <div class="issue-detail-text">${escapeHtml(finding.recommendation)}</div>
+      ${renderFixRouteLink(projectId, finding.fixRoute)}
     </div>
 
     ${compareHtml}

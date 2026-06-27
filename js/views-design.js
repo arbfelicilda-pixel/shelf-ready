@@ -26,7 +26,7 @@ function ViewDesignSpine(projectId) {
   }
 
   const html = `
-    <p class="screen-eyebrow">Let's build your book's backbone.</p>
+    <p class="screen-eyebrow">Does this book actually work? Let's build the backbone first.</p>
     <h1 class="screen-question">Finish the sentence.</h1>
     <p style="color:var(--color-ink-faint); margin-bottom: var(--space-3);">
       When [your reader] faces [their problem], they must [do what] — or else [what happens]?
@@ -220,6 +220,12 @@ function ViewDesignChapters(projectId) {
           <div class="review-explanation">${escapeHtml(f.whatWeFound)} ${escapeHtml(f.whyItMatters)}</div>
         </div>
       `).join('') + renderDesignCompareCard('design.chapterSpineCheck');
+      // Note: DS4 findings carry a fixRoute (Structure → Chapter Map),
+      // but it's intentionally NOT rendered here — it would link back
+      // to this exact screen, providing no real navigation value. The
+      // field stays on the finding object for cases where the SAME
+      // finding might be surfaced elsewhere later (e.g. a future
+      // cross-phase summary), where the link would be meaningful.
     }
 
     Store.completePhase('design');

@@ -127,7 +127,8 @@ const Inspections = (function () {
       whatWeFound: `Your title/subtitle's core promise words average ${Math.round(avgCoverage)}% chapter coverage (subtitle terms weighted more heavily, since titles often use metaphor). "${weakest.word}" is weakest, appearing in ${weakest.chaptersWithTerm} of ${totalChapters} chapters.`,
       whyItMatters: "Readers expect a title's core promise to run through the book, not live in one or two chapters. A low match usually means the title overstates what the book delivers, or the manuscript hasn't fully built out its own premise yet.",
       recommendation: `Either expand the manuscript's treatment of your title's core promise, or revise the title to better match what's actually here.`,
-      evidenceFieldPath: 'evidence.book01.refine.bookPromiseAlignment'
+      evidenceFieldPath: 'evidence.book01.refine.bookPromiseAlignment',
+      fixRoute: { phase: 'Discover', field: 'Promise', path: 'discover/promise' }
     };
   }
 
@@ -322,7 +323,8 @@ const Inspections = (function () {
       whatWeFound: issues.join(' '),
       whyItMatters: "Readers decide whether a book is 'for them' in seconds. Specific, concrete language is easier to recognize, remember, and search for than abstract phrasing — a real factor in whether a book gets picked up.",
       recommendation: 'Pair abstract words with a concrete outcome — not "build confidence" but "speak up in meetings without rehearsing for three days."',
-      evidenceFieldPath: 'evidence.book01.refine.commercialReview'
+      evidenceFieldPath: 'evidence.book01.refine.commercialReview',
+      fixRoute: { phase: 'Package', field: 'Subtitle', path: 'package/subtitle' }
     };
   }
 
@@ -413,7 +415,8 @@ const Inspections = (function () {
       whatWeFound: `Your manuscript addresses ${detected.join(', ')} at different points, each with meaningful frequency.`,
       whyItMatters: "Readers decide quickly whether a book is 'for them.' Switching who the book is talking to can make every reader feel like a secondary audience some of the time.",
       recommendation: 'Choose the one reader who matters most, and rewrite passing references to other groups as examples within their story, not as a parallel address.',
-      evidenceFieldPath: 'evidence.book01.refine.readerFocus'
+      evidenceFieldPath: 'evidence.book01.refine.readerFocus',
+      fixRoute: { phase: 'Discover', field: 'Reader', path: 'discover/reader' }
     };
   }
 
@@ -474,7 +477,8 @@ const Inspections = (function () {
         whatWeFound: `Your introduction is ${introWords} words. None of your title/subtitle's core promise terms appear within it.`,
         whyItMatters: 'Readers use the introduction to decide whether the book delivers what the cover promised. If the promise doesn\'t show up early, readers may put the book down before reaching the part that does.',
         recommendation: 'Move an explicit statement of the book\'s promise into the first few paragraphs of the introduction.',
-        evidenceFieldPath: 'evidence.book01.refine.introPromise'
+        evidenceFieldPath: 'evidence.book01.refine.introPromise',
+        fixRoute: { phase: 'Discover', field: 'Promise', path: 'discover/promise' }
       };
     }
 
@@ -492,7 +496,8 @@ const Inspections = (function () {
         whatWeFound: `Your introduction is ${introWords} words. Your title's promise terms appear, but only in the later part of the introduction.`,
         whyItMatters: 'Readers use the introduction to decide whether the book delivers what the cover promised. If the promise doesn\'t show up early, readers may put the book down before reaching the part that does.',
         recommendation: 'Consider moving the promise statement earlier in the introduction.',
-        evidenceFieldPath: 'evidence.book01.refine.introPromise'
+        evidenceFieldPath: 'evidence.book01.refine.introPromise',
+        fixRoute: { phase: 'Discover', field: 'Promise', path: 'discover/promise' }
       };
     }
 
@@ -558,7 +563,185 @@ const Inspections = (function () {
       whatWeFound: `None of your title/subtitle's core promise terms appear in your conclusion, even accounting for word variations.`,
       whyItMatters: "A conclusion's job is usually to land the promise the book already built. If the promise doesn't show up here, readers may finish without feeling the payoff they were reading toward.",
       recommendation: 'Make sure your conclusion explicitly returns to the language of your title and subtitle, even if just in the closing paragraph.',
-      evidenceFieldPath: 'evidence.book01.refine.conclusionFulfillment'
+      evidenceFieldPath: 'evidence.book01.refine.conclusionFulfillment',
+      fixRoute: { phase: 'Discover', field: 'Promise', path: 'discover/promise' }
+    };
+  }
+
+  // ---- INSP-014: Passive Voice Density (Mechanical) ---------------------
+  // From the Voice Audit research: "was/were" frequency as a countable
+  // proxy for passive-voice-heavy, static prose. Genuinely mechanical —
+  // a literal word count, no comprehension required.
+
+  function runPassiveVoiceDensity(manuscript) {
+    const fullText = manuscript.chapters.map((c) => c.paragraphs.join(' ')).join(' ').toLowerCase();
+    const totalWords = manuscript.rawWordCount || wordCount(fullText);
+    if (totalWords === 0) return null;
+
+    const wasWereMatches = fullText.match(/\b(was|were)\b/g) || [];
+    const density = (wasWereMatches.length / totalWords) * 1000;
+
+    if (density <= 12) return null; // healthy
+
+    const severity = density > 20 ? 'important' : 'minor';
+
+    return {
+      inspectionId: 'INSP-014',
+      category: 'Writing',
+      severity,
+      headline: 'Passive voice runs high',
+      whatWeFound: `"Was" and "were" appear about ${density.toFixed(1)} times per 1,000 words (${wasWereMatches.length} instances total).`,
+      whyItMatters: 'A high rate of "was/were" often signals passive, state-of-being constructions rather than active ones — "the door was opened by her" instead of "she opened the door." Worth a pass to see how many are intentional.',
+      recommendation: 'Search for "was [verb]ed" and "were [verb]ed" patterns and rewrite the ones that read more naturally as a direct action.',
+      evidenceFieldPath: 'evidence.book01.refine.passiveVoiceDensity'
+    };
+  }
+
+  // ---- INSP-015: Sentence Opener Repetition (Mechanical) -----------------
+  // From the Sentence-Level Stress Test research: if one word starts a
+  // large share of sentences, the rhythm reads as monotonous. Counts the
+  // first word of every sentence — fully mechanical.
+
+  function runSentenceOpenerRepetition(manuscript) {
+    const fullText = manuscript.chapters.map((c) => c.paragraphs.join(' ')).join(' ');
+    const sentences = fullText.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (sentences.length < 20) return null; // too small a sample to mean much
+
+    const firstWords = sentences.map((s) => {
+      const match = s.match(/^[a-zA-Z']+/);
+      return match ? match[0].toLowerCase() : null;
+    }).filter(Boolean);
+
+    const counts = {};
+    firstWords.forEach((w) => { counts[w] = (counts[w] || 0) + 1; });
+
+    const topWord = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    const topShare = counts[topWord] / firstWords.length;
+
+    if (topShare < 0.18) return null; // healthy variety
+
+    const severity = topShare > 0.30 ? 'important' : 'minor';
+
+    return {
+      inspectionId: 'INSP-015',
+      category: 'Writing',
+      severity,
+      headline: 'One word opens too many sentences',
+      whatWeFound: `"${topWord.charAt(0).toUpperCase() + topWord.slice(1)}" starts about ${Math.round(topShare * 100)}% of sentences in the manuscript.`,
+      whyItMatters: 'When one word opens a large share of sentences, the rhythm can start to feel monotonous even if each individual sentence reads fine.',
+      recommendation: 'Skim a chapter and try rewriting a few openings — leading with a different part of the sentence breaks the pattern.',
+      evidenceFieldPath: 'evidence.book01.refine.sentenceOpenerRepetition'
+    };
+  }
+
+  // ---- INSP-016: Transition Word Overuse (Mechanical) --------------------
+  // From the Sentence-Level Stress Test research: a single transition
+  // word (However, Meanwhile, etc.) used repeatedly on the same page
+  // reads as a tic. Counts paragraph-starting transition words.
+
+  const TRANSITION_WORDS = ['however', 'meanwhile', 'therefore', 'furthermore', 'moreover', 'consequently', 'nonetheless'];
+
+  function runTransitionOveruse(manuscript) {
+    const allParagraphs = manuscript.chapters.flatMap((c) => c.paragraphs);
+    if (allParagraphs.length < 10) return null;
+
+    const counts = {};
+    allParagraphs.forEach((p) => {
+      const firstWord = (p.trim().match(/^[a-zA-Z]+/) || [''])[0].toLowerCase();
+      if (TRANSITION_WORDS.includes(firstWord)) {
+        counts[firstWord] = (counts[firstWord] || 0) + 1;
+      }
+    });
+
+    const topWord = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    if (!topWord) return null;
+
+    const perThousandParagraphs = (counts[topWord] / allParagraphs.length) * 100;
+    if (perThousandParagraphs < 3) return null; // rare enough to be fine
+
+    return {
+      inspectionId: 'INSP-016',
+      category: 'Writing',
+      severity: 'minor',
+      headline: `"${topWord.charAt(0).toUpperCase() + topWord.slice(1)}" used as a paragraph opener often`,
+      whatWeFound: `"${topWord.charAt(0).toUpperCase() + topWord.slice(1)}" opens ${counts[topWord]} paragraphs across the manuscript.`,
+      whyItMatters: 'A transition word used often as a paragraph-opener can start to read as a verbal tic, especially formal ones like "however" or "furthermore" in otherwise conversational prose.',
+      recommendation: 'Vary the opening — sometimes the connection between paragraphs is clear without naming it.',
+      evidenceFieldPath: 'evidence.book01.refine.transitionOveruse'
+    };
+  }
+
+  // ---- INSP-017: Dialogue Tag Ratio (Mechanical, dialogue only) ----------
+  // From the Dialogue Stress Test research: "said" should dominate tags;
+  // heavy use of alternatives ("exclaimed," "murmured") reads as
+  // distracting. Only fires if dialogue is actually present.
+
+  const SAID_ALTERNATIVES = ['exclaimed', 'murmured', 'whispered', 'shouted', 'snapped', 'retorted', 'declared', 'announced'];
+
+  function runDialogueTagRatio(manuscript) {
+    const fullText = manuscript.chapters.map((c) => c.paragraphs.join(' ')).join(' ');
+    const saidCount = (fullText.match(/\bsaid\b/gi) || []).length;
+    let altCount = 0;
+    SAID_ALTERNATIVES.forEach((alt) => {
+      altCount += (fullText.match(new RegExp('\\b' + alt + '\\b', 'gi')) || []).length;
+    });
+
+    const totalTags = saidCount + altCount;
+    if (totalTags < 10) return null; // not enough dialogue to judge meaningfully
+
+    const saidShare = saidCount / totalTags;
+    if (saidShare >= 0.70) return null; // healthy, matches the research's stated target
+
+    return {
+      inspectionId: 'INSP-017',
+      category: 'Writing',
+      severity: 'minor',
+      headline: '"Said" is a small share of dialogue tags',
+      whatWeFound: `"Said" makes up about ${Math.round(saidShare * 100)}% of dialogue tags found (${saidCount} of ${totalTags}).`,
+      whyItMatters: 'Readers tend to skip over "said" without noticing it. A high rate of alternatives ("exclaimed," "murmured") can become distracting precisely because each one draws attention to itself.',
+      recommendation: 'Consider letting "said" carry more of the dialogue, and reserve distinctive tags for moments that truly need the emphasis.',
+      evidenceFieldPath: 'evidence.book01.refine.dialogueTagRatio'
+    };
+  }
+
+  // ---- INSP-018: Backward Reference Density (Mechanical proxy) ----------
+  // From the Spine Stress Test research ("if I delete this chapter, does
+  // the next one still make sense"): reframed as a countable proxy — a
+  // chapter that frequently references something from earlier ("as we
+  // saw," "remember," "earlier in this book") is more likely load-bearing
+  // than one that never does. This does NOT judge whether a chapter is
+  // filler — it only surfaces which chapters read as self-contained,
+  // for the writer to judge.
+
+  const BACKWARD_REFERENCE_PHRASES = ['as we saw', 'as discussed', 'remember', 'earlier in this book', 'as mentioned', 'recall that', 'as we explored'];
+
+  function runBackwardReferenceDensity(manuscript) {
+    const chapters = manuscript.chapters;
+    if (chapters.length < 4) return null;
+
+    const isolated = [];
+    chapters.forEach((c, idx) => {
+      if (idx === 0) return; // first chapter has nothing earlier to reference
+      const text = c.paragraphs.join(' ').toLowerCase();
+      const hasReference = BACKWARD_REFERENCE_PHRASES.some((p) => text.includes(p));
+      if (!hasReference) isolated.push(c.title);
+    });
+
+    // Only worth surfacing if MOST chapters read as fully self-contained —
+    // a book that occasionally has a self-contained chapter is normal;
+    // one where almost none connect back is worth a second look.
+    const isolatedShare = isolated.length / (chapters.length - 1);
+    if (isolatedShare < 0.85) return null;
+
+    return {
+      inspectionId: 'INSP-018',
+      category: 'Structure',
+      severity: 'informational',
+      headline: 'Chapters read as largely self-contained',
+      whatWeFound: `${isolated.length} of ${chapters.length - 1} chapters (after the first) don't reference anything from earlier in the book.`,
+      whyItMatters: "This isn't necessarily a problem — some structures are intentionally modular. But it's worth checking whether each chapter is meant to stand alone, or whether the book is meant to build chapter to chapter.",
+      recommendation: 'If the book is meant to build progressively, look for a few natural places to callback to an earlier chapter.',
+      evidenceFieldPath: 'evidence.book01.refine.backwardReferenceDensity'
     };
   }
 
@@ -568,18 +751,36 @@ const Inspections = (function () {
    */
   function runAll(manuscript, title, subtitle) {
     const severityRank = { critical: 0, important: 1, minor: 2, informational: 3 };
+
+    // Back matter (Epilogue, About the Author, Acknowledgments, etc.) is
+    // excluded from generic content checks — chapter-length balance,
+    // overlap, and promise-coverage counting all assume every entry is
+    // a real content chapter, and judging a 37-word author bio against
+    // the book's average chapter length produces a nonsensical flag.
+    // runConclusionPromiseFulfillment specifically searches BY NAME for
+    // an Epilogue/Afterword and needs it present, so it still receives
+    // the FULL manuscript, not the filtered one.
+    const contentOnlyManuscript = Object.assign({}, manuscript, {
+      chapters: manuscript.chapters.filter((c) => !c.isBackMatter)
+    });
+
     const findings = [
-      runTitlePromiseAlignment(manuscript, title, subtitle),
-      runChapterOverlap(manuscript),
+      runTitlePromiseAlignment(contentOnlyManuscript, title, subtitle),
+      runChapterOverlap(contentOnlyManuscript),
       runFilterWordDensity(manuscript),
       runAbsoluteLanguage(manuscript),
-      runPacingVariance(manuscript),
+      runPacingVariance(contentOnlyManuscript),
       runCommercialReview(title, subtitle),
-      runChapterLengthBalance(manuscript),
+      runChapterLengthBalance(contentOnlyManuscript),
       runReaderFocusConsistency(manuscript),
       runSentenceParagraphRhythm(manuscript),
-      runIntroductionPromiseSetting(manuscript, title, subtitle),
-      runConclusionPromiseFulfillment(manuscript, title, subtitle)
+      runIntroductionPromiseSetting(contentOnlyManuscript, title, subtitle),
+      runConclusionPromiseFulfillment(manuscript, title, subtitle), // needs full list — searches for Epilogue by name
+      runPassiveVoiceDensity(manuscript),
+      runSentenceOpenerRepetition(manuscript),
+      runTransitionOveruse(manuscript),
+      runDialogueTagRatio(manuscript),
+      runBackwardReferenceDensity(contentOnlyManuscript)
     ].filter(Boolean);
 
     findings.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
@@ -599,6 +800,11 @@ const Inspections = (function () {
     runReaderFocusConsistency,
     runSentenceParagraphRhythm,
     runIntroductionPromiseSetting,
-    runConclusionPromiseFulfillment
+    runConclusionPromiseFulfillment,
+    runPassiveVoiceDensity,
+    runSentenceOpenerRepetition,
+    runTransitionOveruse,
+    runDialogueTagRatio,
+    runBackwardReferenceDensity
   };
 })();

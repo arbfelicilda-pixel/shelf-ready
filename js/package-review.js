@@ -106,7 +106,8 @@ const PackageReview = (function () {
       whatWeFound: `Your chosen title and subtitle share little language with what you said this book is about back in Discover.`,
       whyItMatters: 'A title can test well on its own but no longer match what you said this book is about. This is worth a second look before anything\'s printed.',
       recommendation: 'Re-read your Discover answers for Promise and Positioning, then check whether your title still represents that book.',
-      evidenceFieldPath: 'evidence.book01.package.packageReview'
+      evidenceFieldPath: 'evidence.book01.package.packageReview',
+      fixRoute: { phase: 'Discover', field: 'Promise', path: 'discover/promise' }
     };
   }
 

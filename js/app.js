@@ -30,6 +30,7 @@
   Router.add('#/project/:id/package/review', (p) => ViewPackageReview(p.id));
   Router.add('#/project/:id/publish/checklist', (p) => ViewPublishChecklist(p.id));
   Router.add('#/project/:id/publish/description', (p) => ViewPublishDescription(p.id));
+  Router.add('#/project/:id/publish/report', (p) => ViewPublishReport(p.id));
 
   Router.start();
 })();

@@ -162,7 +162,8 @@ const DesignReview = (function () {
             whatWeFound: `This chapter doesn't share any obvious language with your spine's problem, action, or stakes.`,
             whyItMatters: "A chapter that doesn't connect to the spine isn't necessarily wrong — but it's worth knowing about before you write thousands of words for it. This is the same check Refine runs on a finished manuscript, just earlier, when it's cheap to fix.",
             recommendation: 'Worth checking whether this chapter connects to the spine, or whether the spine needs to expand to cover it.',
-            evidenceFieldPath: 'evidence.book01.design.chapterSpineCheck'
+            evidenceFieldPath: 'evidence.book01.design.chapterSpineCheck',
+            fixRoute: { phase: 'Structure', field: 'Chapter Map', path: 'design/chapters' }
           });
         }
       });
@@ -189,7 +190,8 @@ const DesignReview = (function () {
         whatWeFound: `These two chapter summaries share ${Math.round(worstPair.overlap * 100)}% of their significant words.`,
         whyItMatters: 'Two chapters covering very similar ground at the outline stage often means one of them needs a sharper, more distinct job before you start writing.',
         recommendation: 'Check whether each chapter has a job the other doesn\'t already do.',
-        evidenceFieldPath: 'evidence.book01.design.chapterSpineCheck'
+        evidenceFieldPath: 'evidence.book01.design.chapterSpineCheck',
+        fixRoute: { phase: 'Structure', field: 'Chapter Map', path: 'design/chapters' }
       });
     }
 

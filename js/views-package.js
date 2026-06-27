@@ -21,7 +21,7 @@ function ViewPackageTitles(projectId) {
   `).join('');
 
   const html = `
-    <p class="screen-eyebrow">Let's find a title people will remember.</p>
+    <p class="screen-eyebrow">Will someone click it? Let's find a title people will remember.</p>
     <h1 class="screen-question">List 3-5 possible titles.</h1>
     <p style="color:var(--color-ink-faint); margin-bottom: var(--space-3);">Don't filter yet — just get them down.</p>
 
@@ -224,6 +224,7 @@ function ViewPackageReview(projectId) {
           <div class="review-eyebrow">Worth a second look</div>
           <div class="review-headline">${escapeHtml(finding.headline)}</div>
           <div class="review-explanation">${escapeHtml(finding.whatWeFound)} ${escapeHtml(finding.whyItMatters)}</div>
+          ${renderFixRouteLink(projectId, finding.fixRoute)}
         </div>` + renderPackageCompareCard('package.packageReview')
       : `<div class="no-issues-banner">Your title and subtitle still match what you said this book is about. Good shape.</div>`
     }

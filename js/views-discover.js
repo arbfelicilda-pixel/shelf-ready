@@ -15,7 +15,7 @@ const DISCOVER_STEPS = ['workingTitle', 'concept', 'reader', 'promise', 'positio
 
 const DISCOVER_CONTENT = {
   workingTitle: {
-    eyebrow: "We're defining the foundation of your book before you write or revise it.",
+    eyebrow: "Should I write this book? We're defining the foundation first.",
     question: "What's the working title? (It can change later.)",
     placeholder: 'e.g. The Quiet Advantage',
     type: 'text'
@@ -282,7 +282,7 @@ function ViewDiscoverDone(projectId) {
     the narrative spine and chapter map everything else gets built on.</p>
 
     <div class="actions-row">
-      <a href="#/project/${projectId}/design/spine" class="btn" style="text-decoration:none;">Continue to Design</a>
+      <a href="#/project/${projectId}/design/spine" class="btn" style="text-decoration:none;">Continue to Structure</a>
       <button class="btn-quiet" id="review-discover-btn" style="border-radius:var(--radius); padding:0.75rem 1.2rem;">
         Review my answers
       </button>

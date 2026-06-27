@@ -24,6 +24,7 @@
  *   #/project/:id/package/review    → package consistency review
  *   #/project/:id/publish/checklist → launch checklist
  *   #/project/:id/publish/description → author bio + book description
+ *   #/project/:id/publish/report   → final Shelf Ready Report
  *   #/settings                      → high contrast, TTS, reduced motion
  */
 
