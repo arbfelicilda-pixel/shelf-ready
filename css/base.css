@@ -77,6 +77,19 @@ textarea, input, select {
 }
 .app-brand:hover { text-decoration: none; color: var(--color-accent); }
 
+.app-current-book {
+  font-family: var(--font-body);
+  font-size: var(--scale-small);
+  color: var(--color-ink-faint);
+  font-weight: normal;
+  letter-spacing: normal;
+}
+.app-current-book::before {
+  content: '/';
+  margin: 0 0.5rem;
+  color: var(--color-rule);
+}
+
 .app-header-actions {
   display: flex;
   gap: var(--space-2);
@@ -365,6 +378,28 @@ textarea, input, select {
   margin-bottom: 0.3rem;
 }
 
+.book-card-title-input {
+  display: block;
+  width: 100%;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin-bottom: 0.3rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--color-ink);
+  padding: 0.15rem 0.4rem;
+  margin-left: -0.4rem;
+}
+.book-card-title-input:hover {
+  border-color: var(--color-rule);
+}
+.book-card-title-input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+  background: var(--color-bg-sunken);
+}
+
 .book-card-progress {
   font-size: var(--scale-small);
   color: var(--color-ink-faint);
@@ -565,6 +600,29 @@ textarea, input, select {
 .preview-field-value { font-family: var(--font-display); }
 
 .chapter-list { margin: var(--space-2) 0; }
+
+.part-group {
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.part-group-header {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  background: var(--color-bg-raised);
+  padding: 0.6rem var(--space-3);
+  border-bottom: 1px solid var(--color-rule);
+}
+.part-group-header-none {
+  color: var(--color-ink-faint);
+  font-style: italic;
+  font-family: var(--font-body);
+  font-size: var(--scale-small);
+}
+.part-group .chapter-row { padding: 0.5rem var(--space-3); }
+
 .chapter-row {
   display: flex;
   align-items: center;
@@ -573,6 +631,8 @@ textarea, input, select {
   border-bottom: 1px solid var(--color-rule);
 }
 .chapter-row:last-child { border-bottom: none; }
+.chapter-row-backmatter { opacity: 0.7; }
+.chapter-row-backmatter .chapter-row-title { font-style: italic; }
 .chapter-row-num { color: var(--color-ink-faint); font-size: var(--scale-small); width: 1.6rem; flex-shrink: 0; }
 .chapter-row-title {
   flex: 1;
@@ -612,6 +672,52 @@ textarea, input, select {
 .severity-badge.important { background: rgba(192,57,43,0.10); color: var(--color-accent); }
 .severity-badge.minor { background: rgba(168,158,140,0.15); color: var(--color-ink-dim); }
 .severity-badge.informational { background: rgba(168,158,140,0.1); color: var(--color-ink-faint); }
+.severity-badge.good { background: rgba(107,143,113,0.15); color: var(--color-pass); }
+
+.chapter-findings-group {
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  margin-bottom: 0.6rem;
+  background: var(--color-bg-raised);
+}
+.chapter-findings-group summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  font-family: var(--font-display);
+}
+.chapter-findings-group[open] summary {
+  border-bottom: 1px solid var(--color-rule);
+}
+.chapter-findings-group .issue-row {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+.chapter-findings-group .issue-row:first-of-type { border-top: 1px solid var(--color-rule); }
+
+.located-instance {
+  border-left: 2px solid var(--color-rule);
+  padding-left: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.located-instance-location {
+  display: block;
+  font-size: var(--scale-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-faint);
+  margin-bottom: 0.2rem;
+}
+.located-instance-sentence {
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  margin: 0;
+}
 
 .report-summary-row {
   display: flex;

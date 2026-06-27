@@ -116,12 +116,24 @@ async function handleFile(file, projectId) {
         confidence: c.confidence,
         wordCount: c.wordCount,
         paragraphs: c.paragraphs,
-        isBackMatter: !!c.isBackMatter
+        isBackMatter: !!c.isBackMatter,
+        part: c.part || null
       })),
       overallConfidence: imported.overallConfidence,
       rawWordCount: imported.rawWordCount,
       importedAt: new Date().toISOString()
     });
+
+    // Sync the project's name from the detected manuscript title, but
+    // only while it's still the default placeholder — confirmed bug:
+    // every project was created as "Untitled Book" with nothing ever
+    // updating it, so the Dashboard and every screen header showed
+    // "Untitled Book" even after a real manuscript with a real title
+    // had been uploaded. Never overwrite a name the user already set.
+    const activeProject = Store.getActiveProject();
+    if (activeProject && activeProject.name === 'Untitled Book' && imported.title) {
+      Store.updateField('name', imported.title);
+    }
 
     setTimeout(() => Router.navigate('/project/' + projectId + '/refine/preview'), 400);
   } catch (err) {
@@ -215,15 +227,61 @@ function ViewRefinePreview(projectId) {
       ' chapters, but we\'re not completely sure we split every one correctly — please review the list below before continuing.</div>'
     : '';
 
-  const chapterRows = manuscript.chapters.map((c, i) => {
-    const isLast = i === manuscript.chapters.length - 1;
-    return '<div class="chapter-row">' +
+  // Group chapters by their detected Part, preserving original sequence
+  // numbers. Confirmed real gap: every chapter has carried a real `part`
+  // field since the manuscript-import fixes built earlier in this
+  // build, but no screen ever read it — chapters rendered as one flat
+  // list regardless of whether the manuscript had real Part structure.
+  // Manuscripts with no Parts at all (confirmed real, not every book
+  // uses them) fall back to the original flat list, unchanged.
+  //
+  // Back matter (isBackMatter) gets a distinct visual section label
+  // here too, separating it from real content chapters the same way
+  // it's already excluded from content-based review checks. Front
+  // matter is NOT addressed in this screen — it's discarded after
+  // title/subtitle extraction during upload and never reaches stored
+  // state, so there's no real data here to show. Noting that limit
+  // honestly rather than fabricating a front-matter section with no
+  // real content behind it.
+  function renderChapterRow(c, i, isLast) {
+    return '<div class="chapter-row' + (c.isBackMatter ? ' chapter-row-backmatter' : '') + '">' +
       '<span class="chapter-row-num">' + (i + 1) + '</span>' +
       '<input class="chapter-row-title" data-idx="' + i + '" value="' + escapeHtml(c.title) + '" />' +
+      (c.isBackMatter ? '<span class="confidence-flag" style="background:rgba(168,158,140,0.15); color:var(--color-ink-faint);">back matter</span>' : '') +
       (c.confidence !== 'high' ? '<span class="confidence-flag ' + c.confidence + '">not sure</span>' : '<span class="confidence-flag" style="background:rgba(107,143,113,0.15); color:var(--color-pass);">✓ detected</span>') +
       (!isLast ? '<button class="icon-btn merge-next-btn" data-idx="' + i + '" title="Merge into the next chapter" style="padding:0.3rem 0.6rem; font-size:var(--scale-micro);">Merge ↓</button>' : '') +
     '</div>';
-  }).join('');
+  }
+
+  const anyPartsDetected = manuscript.chapters.some((c) => c.part);
+  let chapterRows;
+
+  if (anyPartsDetected) {
+    const groups = [];
+    let currentGroup = null;
+    manuscript.chapters.forEach((c, i) => {
+      const partKey = c.part || null;
+      if (!currentGroup || currentGroup.part !== partKey) {
+        currentGroup = { part: partKey, chapters: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.chapters.push({ chapter: c, index: i });
+    });
+
+    chapterRows = groups.map((group) => {
+      const rowsHtml = group.chapters.map(({ chapter, index }) =>
+        renderChapterRow(chapter, index, index === manuscript.chapters.length - 1)
+      ).join('');
+      const partHeader = group.part
+        ? `<div class="part-group-header">${escapeHtml(group.part)}</div>`
+        : `<div class="part-group-header part-group-header-none">No Part detected</div>`;
+      return `<div class="part-group">${partHeader}${rowsHtml}</div>`;
+    }).join('');
+  } else {
+    chapterRows = manuscript.chapters.map((c, i) =>
+      renderChapterRow(c, i, i === manuscript.chapters.length - 1)
+    ).join('');
+  }
 
   const html = `
     <p class="screen-eyebrow">Book Preview</p>
@@ -306,7 +364,7 @@ function ViewRefinePreview(projectId) {
 
 // ---- Editorial Review (report) -------------------------------------------
 
-const SEVERITY_LABEL = { critical: 'Critical', important: 'Important', minor: 'Minor', informational: 'Info' };
+const SEVERITY_LABEL = { critical: 'Critical', important: 'Important', minor: 'Minor', informational: 'Info', good: 'Working well' };
 
 function ViewRefineReport(projectId) {
   Store.setActiveProject(projectId);
@@ -315,11 +373,27 @@ function ViewRefineReport(projectId) {
 
   if (!project || !project.refine.manuscript) return Router.navigate('/project/' + projectId + '/refine/upload');
 
-  const counts = { critical: 0, important: 0, minor: 0, informational: 0 };
-  findings.forEach((f) => counts[f.severity]++);
+  const counts = { critical: 0, important: 0, minor: 0, informational: 0, good: 0 };
+  findings.forEach((f) => { counts[f.severity] = (counts[f.severity] || 0) + 1; });
 
-  const majorFindings = findings.filter((f) => f.severity === 'critical' || f.severity === 'important');
-  const minorFindings = findings.filter((f) => f.severity === 'minor' || f.severity === 'informational');
+  // Group findings by chapter. A finding with chapterIndex === null is a
+  // manuscript-wide pattern (Title Promise, Reader Focus, Chapter
+  // Overlap's positive case, etc.) and gets its own section rather than
+  // being forced into a chapter it doesn't actually belong to.
+  const manuscriptWide = findings.filter((f) => f.chapterIndex === null || f.chapterIndex === undefined);
+  const chapterGrouped = {};
+  findings.forEach((f) => {
+    if (f.chapterIndex === null || f.chapterIndex === undefined) return;
+    if (!chapterGrouped[f.chapterIndex]) chapterGrouped[f.chapterIndex] = [];
+    chapterGrouped[f.chapterIndex].push(f);
+    // A cross-chapter finding (like Chapter Overlap) also names a
+    // second chapter — file it there too, so both sides of the
+    // relationship are visible from either chapter's own findings.
+    if (f.secondChapterIndex !== undefined && f.secondChapterIndex !== null) {
+      if (!chapterGrouped[f.secondChapterIndex]) chapterGrouped[f.secondChapterIndex] = [];
+      chapterGrouped[f.secondChapterIndex].push(f);
+    }
+  });
 
   function issueRow(f) {
     const realIdx = findings.indexOf(f);
@@ -330,13 +404,41 @@ function ViewRefineReport(projectId) {
     '</button>';
   }
 
-  const majorHtml = majorFindings.length
-    ? majorFindings.map(issueRow).join('')
-    : '<div class="no-issues-banner">Nothing critical or important found. Good shape.</div>';
+  function chapterStatusLabel(chapterFindings) {
+    const hasCritical = chapterFindings.some((f) => f.severity === 'critical');
+    const hasImportant = chapterFindings.some((f) => f.severity === 'important');
+    const hasMinor = chapterFindings.some((f) => f.severity === 'minor');
+    if (hasCritical) return { label: 'Needs another look', color: 'var(--color-accent)' };
+    if (hasImportant) return { label: 'Worth a look', color: 'var(--color-accent)' };
+    if (hasMinor) return { label: 'A few small things', color: 'var(--color-ink-faint)' };
+    return { label: 'Good shape', color: 'var(--color-pass)' };
+  }
 
-  const minorHtml = minorFindings.length
-    ? '<details class="minor-disclosure"><summary>Smaller things worth a glance (' + minorFindings.length + ')</summary>' +
-      minorFindings.map(issueRow).join('') + '</details>'
+  const manuscript = project.refine.manuscript;
+  const chapterSections = manuscript.chapters.map((chapter, idx) => {
+    const chapterFindings = chapterGrouped[idx] || [];
+    if (chapterFindings.length === 0) return ''; // chapter had no checks fire at all (e.g. too short to judge)
+
+    const status = chapterStatusLabel(chapterFindings);
+    const majorRows = chapterFindings.filter((f) => f.severity === 'critical' || f.severity === 'important').map(issueRow).join('');
+    const minorRows = chapterFindings.filter((f) => f.severity === 'minor' || f.severity === 'informational').map(issueRow).join('');
+    const goodRows = chapterFindings.filter((f) => f.severity === 'good').map(issueRow).join('');
+
+    return `
+      <details class="chapter-findings-group">
+        <summary>
+          <span>${escapeHtml(chapter.title)}</span>
+          <span style="color:${status.color}; font-size:var(--scale-small);">${status.label}</span>
+        </summary>
+        ${majorRows}
+        ${minorRows}
+        ${goodRows}
+      </details>
+    `;
+  }).join('');
+
+  const manuscriptWideHtml = manuscriptWide.length
+    ? `<h2 style="margin-top:var(--space-4);">Across the whole manuscript</h2>` + manuscriptWide.map(issueRow).join('')
     : '';
 
   const html = `
@@ -347,10 +449,13 @@ function ViewRefineReport(projectId) {
       <div class="report-summary-item"><strong>${counts.critical}</strong> Critical</div>
       <div class="report-summary-item"><strong>${counts.important}</strong> Important</div>
       <div class="report-summary-item"><strong>${counts.minor}</strong> Minor</div>
+      <div class="report-summary-item" style="color:var(--color-pass);"><strong>${counts.good}</strong> Working well</div>
     </div>
 
-    ${majorHtml}
-    ${minorHtml}
+    <h2 style="margin-top:var(--space-4);">By chapter</h2>
+    ${chapterSections}
+
+    ${manuscriptWideHtml}
 
     <div class="actions-row">
       <a href="#/dashboard" class="btn" style="text-decoration:none;">Back to My Books</a>
@@ -382,25 +487,52 @@ function ViewRefineIssueDetail(projectId, idxStr) {
 
   const compareHtml = renderCompareCardOptional(finding.evidenceFieldPath);
 
+  const locationLine = finding.chapterTitle
+    ? `<p style="color:var(--color-ink-faint); margin-top:-0.5rem; margin-bottom:var(--space-3);">${escapeHtml(finding.chapterTitle)}${finding.secondChapterTitle ? ' &amp; ' + escapeHtml(finding.secondChapterTitle) : ''}</p>`
+    : '';
+
+  // The actual point of the per-chapter rebuild: show the literal
+  // flagged sentence and where it sits, not just an abstract count.
+  // "The flower" vs "the red roses given by my dad yesterday" — this
+  // is the difference rendered on screen, not just present in the data.
+  const instancesHtml = (finding.instances && finding.instances.length)
+    ? `<div class="issue-detail-section">
+        <div class="issue-detail-label">Where this shows up</div>
+        ${finding.instances.map((i) => `
+          <div class="located-instance">
+            <span class="located-instance-location">Paragraph ${i.paragraphIndex + 1}</span>
+            <p class="located-instance-sentence">"${escapeHtml(i.sentence)}"</p>
+          </div>
+        `).join('')}
+      </div>`
+    : '';
+
+  const recommendationHtml = finding.recommendation
+    ? `<div class="issue-detail-section">
+        <div class="issue-detail-label">Recommendation</div>
+        <div class="issue-detail-text">${escapeHtml(finding.recommendation)}</div>
+        ${renderFixRouteLink(projectId, finding.fixRoute)}
+      </div>`
+    : ''; // good findings have no recommendation — nothing to fix, so nothing rendered here
+
   const html = `
     <p class="screen-eyebrow">${finding.category} &middot; <span class="severity-badge ${finding.severity}">${SEVERITY_LABEL[finding.severity]}</span></p>
     <h1 class="screen-question">${escapeHtml(finding.headline)}</h1>
+    ${locationLine}
 
     <div class="issue-detail-section">
       <div class="issue-detail-label">What we found</div>
       <div class="issue-detail-text">${escapeHtml(finding.whatWeFound)}</div>
     </div>
 
+    ${instancesHtml}
+
     <div class="issue-detail-section">
       <div class="issue-detail-label">Why it matters</div>
       <div class="issue-detail-text">${escapeHtml(finding.whyItMatters)}</div>
     </div>
 
-    <div class="issue-detail-section">
-      <div class="issue-detail-label">Recommendation</div>
-      <div class="issue-detail-text">${escapeHtml(finding.recommendation)}</div>
-      ${renderFixRouteLink(projectId, finding.fixRoute)}
-    </div>
+    ${recommendationHtml}
 
     ${compareHtml}
 

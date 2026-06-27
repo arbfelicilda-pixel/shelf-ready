@@ -9,10 +9,14 @@
  */
 
 function renderShell(innerHTML) {
+  const activeProject = Store.getActiveProject();
+  const projectLabel = activeProject
+    ? `<span class="app-current-book">${escapeHtml(activeProject.name)}</span>`
+    : '';
   return `
     <div id="app">
       <header class="app-header">
-        <a href="#/dashboard" class="app-brand">Shelf Ready</a>
+        <a href="#/dashboard" class="app-brand">Shelf Ready ${projectLabel}</a>
         <div class="app-header-actions">
           <button class="icon-btn" id="settings-btn" aria-label="Settings">Settings</button>
         </div>
@@ -143,8 +147,8 @@ function ViewDashboard() {
         .map(
           (p) => `
         <div class="book-card">
-          <div>
-            <div class="book-card-title">${escapeHtml(p.name)}</div>
+          <div style="flex:1;">
+            <input class="book-card-title-input" data-id="${p.id}" value="${escapeHtml(p.name)}" aria-label="Book title" />
             <div class="book-card-progress">${phaseProgressLabel(p)}</div>
           </div>
           <button class="btn resume-btn" data-id="${p.id}">Continue →</button>
@@ -165,6 +169,18 @@ function ViewDashboard() {
   mountShellChrome();
 
   document.getElementById('new-book-btn').addEventListener('click', () => Router.navigate('/entry-point'));
+
+  document.querySelectorAll('.book-card-title-input').forEach((input) => {
+    input.addEventListener('change', (e) => {
+      Store.renameProject(e.target.dataset.id, e.target.value);
+    });
+    // Pressing Enter should commit the rename and move focus away,
+    // rather than leave the user wondering whether it saved.
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+    });
+  });
+
   document.querySelectorAll('.resume-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const project = Store.getState().projects[btn.dataset.id];

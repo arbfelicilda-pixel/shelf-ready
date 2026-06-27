@@ -182,6 +182,25 @@ const Store = (function () {
       return true;
     },
 
+    /**
+     * Renames a project by ID, regardless of whether it's currently
+     * active. Confirmed bug fix: every project was created with the
+     * hardcoded name "Untitled Book" and nothing ever let the user
+     * change it — the Dashboard and every screen header showed
+     * "Untitled Book" permanently, even for a project with a real
+     * uploaded manuscript.
+     */
+    renameProject(projectId, newName) {
+      const project = state.projects[projectId];
+      if (!project) return false;
+      const trimmed = (newName || '').trim();
+      project.name = trimmed || 'Untitled Book';
+      project.updatedAt = new Date().toISOString();
+      persist();
+      notify({ type: 'project-renamed', projectId, name: project.name });
+      return true;
+    },
+
     listProjects() {
       return Object.values(state.projects).sort(
         (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)

@@ -66,7 +66,75 @@ const ManuscriptImport = (function () {
   }
 
   const FRONT_MATTER_HEADINGS = /^(introduction|preface|foreword|prologue)$/i;
-  const BACK_MATTER_HEADINGS = /^(conclusion|afterword|epilogue|references|bibliography|appendix|acknowledgments|about the author)/i;
+  const BACK_MATTER_HEADINGS = /^(conclusion|afterword|epilogue|references|bibliography|appendix|acknowledgments|about the author|also by|a final note|author's note)/i;
+
+  /**
+   * Detects a printed Table of Contents block by anchoring on the
+   * literal word "Contents" (or "Table of Contents") as its own
+   * heading-like line, then marking every Part/chapter-marker block
+   * between it and the first REAL Part/chapter marker that's followed
+   * by substantial prose (not just another short title-looking line)
+   * as ToC noise, not real structure.
+   *
+   * Confirmed needed by testing: an earlier attempt assumed a ToC
+   * looks like several Part markers in a row with nothing between
+   * them. That assumption was wrong for a real manuscript whose ToC
+   * actually interleaves "PART ONE" / chapter title / chapter title /
+   * "PART TWO" / chapter title — never two Part markers back to back.
+   * Anchoring on the literal "Contents" line is far more reliable
+   * than guessing at block adjacency patterns.
+   */
+  /**
+   * Checks whether a marker block at index i is followed by real
+   * content, using paragraph COUNT rather than any single paragraph's
+   * length. A fixed length threshold (e.g. "next paragraph must be
+   * 200+ characters") failed on a real manuscript written in short,
+   * punchy paragraphs — single sentences as their own paragraph is a
+   * deliberate, legitimate style, and no length threshold reliably
+   * tells that apart from a ToC entry. Counting how many consecutive
+   * paragraphs follow before the next marker is a more robust signal:
+   * a ToC entry is followed by 0-1 other short lines before the next
+   * Part/chapter marker; real chapter content is followed by many
+   * paragraphs in a row.
+   */
+  function isFollowedByRealContent(rawBlocks, i) {
+    let consecutiveParagraphs = [];
+    for (let j = i + 1; j < rawBlocks.length; j++) {
+      if (rawBlocks[j].type === 'paragraph') { consecutiveParagraphs.push(rawBlocks[j].text); continue; }
+      break; // hit another marker or non-paragraph block
+    }
+    if (consecutiveParagraphs.length < 4) return false;
+    // A ToC's chapter-title lines are short ("Familiar Feels Safe");
+    // real prose paragraphs, even short punchy ones, average longer.
+    // Combining count with average length distinguishes "many short
+    // ToC entries in a row" from "many real paragraphs in a row" —
+    // count alone was satisfied equally by both.
+    const avgLength = consecutiveParagraphs.reduce((s, t) => s + t.length, 0) / consecutiveParagraphs.length;
+    return avgLength > 40;
+  }
+
+  function markTOCBlockByContentsHeading(rawBlocks) {
+    const contentsIdx = rawBlocks.findIndex((b) =>
+      b.type !== 'part' && /^(table of )?contents$/i.test(b.text.trim())
+    );
+    if (contentsIdx === -1) return rawBlocks; // no literal Contents heading found, nothing to do
+
+    let realStructureStart = -1;
+    for (let i = contentsIdx + 1; i < rawBlocks.length; i++) {
+      const isMarker = rawBlocks[i].type === 'part' || rawBlocks[i].type === 'heading' || rawBlocks[i].type === 'bare-chapter-marker';
+      if (!isMarker) continue;
+      if (isFollowedByRealContent(rawBlocks, i)) { realStructureStart = i; break; }
+    }
+    if (realStructureStart === -1) return rawBlocks; // couldn't find a confident boundary, leave as-is
+
+    for (let i = contentsIdx; i < realStructureStart; i++) {
+      if (rawBlocks[i].type !== 'part' && rawBlocks[i].type !== 'heading') continue;
+      if (!isFollowedByRealContent(rawBlocks, i)) {
+        rawBlocks[i] = { type: 'paragraph', text: rawBlocks[i].text, confidence: 'high' };
+      }
+    }
+    return rawBlocks;
+  }
 
   function isPartMarker(text) {
     const trimmed = text.trim();
@@ -167,6 +235,11 @@ const ManuscriptImport = (function () {
         return;
       }
     });
+
+    // Exclude a printed Table of Contents block, anchored on the literal
+    // "Contents" heading, BEFORE the merge pass runs, so currentPart
+    // never inherits a stale ToC entry.
+    markTOCBlockByContentsHeading(rawBlocks);
 
     // Second pass: merge any "bare-chapter-marker" with the very next
     // block's text (assumed to be the chapter's real title) into a
@@ -341,7 +414,24 @@ const ManuscriptImport = (function () {
     const front = chapters.find((c) => c.isFrontMatter);
     if (front && front.paragraphs.length) {
       if (front.paragraphs[0] && front.paragraphs[0].length < 100) title = front.paragraphs[0];
-      if (front.paragraphs[1] && front.paragraphs[1].length < 150) subtitle = front.paragraphs[1];
+
+      // Confirmed real bug: some manuscripts print the title twice on
+      // the title page (once as a heading, once styled differently
+      // right below it). Blindly taking paragraphs[1] as the subtitle
+      // produced an identical Title and Subtitle field when that
+      // second line was just the title repeated, not a real subtitle.
+      // Now skip any front-matter line that's the same text as the
+      // title (case-insensitive, trimmed) when looking for the
+      // subtitle, checking a few lines deep rather than only the
+      // second line.
+      const normalizedTitle = title.trim().toLowerCase();
+      for (let i = 1; i < front.paragraphs.length; i++) {
+        const candidate = front.paragraphs[i];
+        if (!candidate || candidate.length >= 150) continue;
+        if (candidate.trim().toLowerCase() === normalizedTitle) continue; // same as title, skip
+        subtitle = candidate;
+        break;
+      }
     }
 
     const rawWordCount = chapters.reduce((sum, c) => sum + c.wordCount, 0);
