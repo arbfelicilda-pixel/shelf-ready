@@ -1,0 +1,71 @@
+/* ═══════════════════════════════════════════════════════════
+   TOKENS.CSS — Shelf Ready
+   ───────────────────────────────────────────────────────────
+   The brief already locked the aesthetic: dark slate + cream,
+   serif heading, Courier Prime mono for manuscript text,
+   editorial red accent. This file is that brief expressed as
+   variables — every other file derives from these, nothing
+   hardcodes a color or a font outside this file.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ---- color: workshop-at-night palette ---- */
+  --color-bg:          #1a1a1a;   /* deep slate, the room */
+  --color-bg-raised:   #232323;   /* cards, panels — one step up from the room */
+  --color-bg-sunken:   #141414;   /* the manuscript "paper" panel sits a notch darker */
+  --color-paper:       #f5f0e8;   /* cream — manuscript text background */
+  --color-ink:         #ece6da;   /* primary text on dark */
+  --color-ink-dim:     #a89e8c;   /* secondary text on dark, warm grey-cream */
+  --color-ink-faint:   #6b6358;   /* tertiary / placeholder text */
+  --color-rule:        #38352f;   /* hairline dividers on dark */
+  --color-accent:      #c0392b;   /* editorial red — flags, the signature color */
+  --color-accent-dim:  #7a2920;   /* pressed/hover state for accent */
+  --color-pass:        #6b8f71;   /* quiet sage green — "pass" verdicts, never loud */
+  --color-link:        #d8cdb8;
+
+  /* ---- type ---- */
+  --font-display: 'Lora', Georgia, 'Times New Roman', serif;       /* headings — book world */
+  --font-body:     'IBM Plex Mono', 'Courier New', monospace;      /* UI/body — precision, editing */
+  --font-manuscript: 'Courier Prime', 'Courier New', monospace;    /* manuscript excerpts only */
+
+  --scale-hero:   clamp(2rem, 5vw, 3.2rem);
+  --scale-h1:     clamp(1.5rem, 3vw, 2.1rem);
+  --scale-h2:     1.4rem;
+  --scale-body:   1.05rem;
+  --scale-small:  0.875rem;
+  --scale-micro:  0.75rem;
+
+  /* ---- spacing scale ---- */
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2.5rem;
+  --space-5: 4rem;
+  --space-6: 6rem;
+
+  /* ---- layout ---- */
+  --content-width: 640px;
+  --radius: 3px; /* workshop bench, not rounded software — kept tight and square-ish */
+
+  --transition-quiet: 220ms ease;
+}
+
+/* High contrast mode — toggled via .high-contrast on <html> */
+html.high-contrast {
+  --color-bg:        #000000;
+  --color-bg-raised: #0c0c0c;
+  --color-bg-sunken: #000000;
+  --color-ink:       #ffffff;
+  --color-ink-dim:   #e2e2e2;
+  --color-ink-faint: #b5b5b5;
+  --color-rule:      #555555;
+  --color-accent:    #ff5b42;
+  --color-pass:      #7fd08a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
